@@ -146,16 +146,17 @@ nav{height:78px;display:flex;align-items:center;justify-content:space-between;bo
         if(!txSubmitting){button.disabled=false;button.style.opacity="";button.style.cursor="";button.textContent=originalText}
       },wait);
     };
-    const {data:authData,error:authError}=await supabase.auth.getUser();
-    if(authError||!authData?.user){
-      currentUser=null;
-      txSubmitting=false;
-      button.textContent=originalText;
-      unlock();
-      alert("Sua sessão não está ativa. Entre novamente no DEXL.");
-      return;
+    if(!currentUser){
+      const {data:authData,error:authError}=await supabase.auth.getUser();
+      if(authError||!authData?.user){
+        txSubmitting=false;
+        button.textContent=originalText;
+        unlock();
+        alert("Sua sessão não está ativa. Entre novamente no DEXL.");
+        return;
+      }
+      currentUser=authData.user;
     }
-    currentUser=authData.user;
     const description=document.getElementById("txDesc").value.trim(), amount=Number(document.getElementById("txValue").value);
     const type=document.getElementById("txType").value==="entrada"?"income":"expense", category=document.getElementById("txCat").value;
     if(!description||amount<=0){
