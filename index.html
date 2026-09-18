@@ -183,7 +183,9 @@ nav{height:78px;display:flex;align-items:center;justify-content:space-between;bo
     }
     txForm.reset();
     showToast("Transação concluída","Seu lançamento foi salvo no DEXL Finance.");
-    Promise.all([loadTransactions(),updateStats()]).catch(err=>console.error("DEXL transaction refresh error:",err));
+    const transactionModule=document.getElementById("app");
+    transactionModule.classList.remove("open");
+    showDashboard(currentUser);
     txSubmitting=false;
     unlock();
   });
