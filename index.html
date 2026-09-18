@@ -25,7 +25,7 @@ nav{height:78px;display:flex;align-items:center;justify-content:space-between;bo
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.app-card:hover{border-color:#655b00;transform:translateY(-2px)}
 @media(max-width:850px){.links{display:none}.hero{grid-template-columns:1fr;padding-top:60px}.visual{min-height:580px}.ai{right:0}.strip-inner{grid-template-columns:1fr 1fr}.strip-item:nth-child(2n){border:0}.cards,.dashboard{grid-template-columns:1fr}.copy h2{font-size:38px}.cta{padding:40px 20px}.cta h2{font-size:36px}}
 @media(max-width:520px){.actions .btn-dark{display:none}.hero h1{letter-spacing:-2.5px}.hero p{font-size:16px}.hero-actions{flex-direction:column}.visual{transform:scale(.88);margin:-20px -35px}.phone{width:275px}.ai{right:-20px}.strip-inner{grid-template-columns:1fr}.strip-item{border:0;border-bottom:1px solid #222;padding-bottom:14px}.stats{grid-template-columns:1fr}.section{padding:70px 0}.form-grid{grid-template-columns:1fr}.app-grid{grid-template-columns:1fr}.app-stats{grid-template-columns:1fr}.auth-card{padding:26px}}
-.dexl-toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,30px) scale(.92);opacity:0;z-index:5000;display:flex;align-items:center;gap:13px;min-width:280px;max-width:calc(100% - 32px);padding:16px 20px;border:1px solid #3a3a3a;border-radius:18px;background:rgba(18,18,18,.96);box-shadow:0 18px 60px rgba(0,0,0,.55);backdrop-filter:blur(18px);pointer-events:none;transition:opacity .28s ease,transform .28s cubic-bezier(.2,.9,.2,1)}.dexl-toast.show{opacity:1;transform:translate(-50%,0) scale(1)}.toast-check{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--yellow);color:#080808;font-weight:900;font-size:21px;flex:none;animation:toastPop .55s cubic-bezier(.2,1.4,.4,1)}.toast-check svg{width:22px;height:22px;stroke:currentColor;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}.toast-copy strong{display:block;font-size:15px}.toast-copy span{display:block;color:#999;font-size:12px;margin-top:3px}@keyframes toastPop{0%{transform:scale(0) rotate(-25deg)}65%{transform:scale(1.18) rotate(5deg)}100%{transform:scale(1) rotate(0)}}</style>
+.dexl-toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,30px) scale(.92);opacity:0;z-index:5000;display:flex;align-items:center;gap:13px;min-width:280px;max-width:calc(100% - 32px);padding:16px 20px;border:1px solid #3a3a3a;border-radius:18px;background:rgba(18,18,18,.96);box-shadow:0 18px 60px rgba(0,0,0,.55);backdrop-filter:blur(18px);pointer-events:none;transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.2,1)}.dexl-toast.show{opacity:1;transform:translate(-50%,0) scale(1)}.toast-check{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--yellow);color:#080808;font-weight:900;font-size:21px;flex:none;animation:toastPop .55s cubic-bezier(.2,1.4,.4,1)}.toast-check svg{width:22px;height:22px;stroke:currentColor;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}.toast-copy strong{display:block;font-size:15px}.toast-copy span{display:block;color:#999;font-size:12px;margin-top:3px}@keyframes toastPop{0%{transform:scale(.55) rotate(-12deg)}65%{transform:scale(1.08) rotate(3deg)}100%{transform:scale(1) rotate(0)}}</style>
 </head>
 <body>
 <nav><div class="container" style="display:flex;align-items:center;justify-content:space-between;width:100%">
@@ -70,7 +70,7 @@ nav{height:78px;display:flex;align-items:center;justify-content:space-between;bo
   const nameInput=document.getElementById("authName"), emailInput=document.getElementById("authEmail"), passwordInput=document.getElementById("authPassword"), message=document.getElementById("authMessage");
   const dashboard=document.getElementById("dashboardScreen"), dashName=document.getElementById("dashName");
   const txForm=document.getElementById("txForm"), txList=document.getElementById("txList"), txCount=document.getElementById("txCount");
-  let mode="register", currentUser=null;
+  let mode="register", currentUser=null, txSubmitting=false;
 
   const money=n=>Number(n).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
   const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
@@ -131,22 +131,53 @@ nav{height:78px;display:flex;align-items:center;justify-content:space-between;bo
 
   txForm.addEventListener("submit",async e=>{
     e.preventDefault();
+    if(txSubmitting)return;
+    const button=txForm.querySelector('button[type="submit"]');
+    const originalText=button.textContent;
+    txSubmitting=true;
+    button.disabled=true;
+    button.style.opacity=".65";
+    button.style.cursor="not-allowed";
+    button.textContent="Salvando…";
+    const unlockAt=Date.now()+2000;
+    const unlock=()=>{
+      const wait=Math.max(0,unlockAt-Date.now());
+      setTimeout(()=>{
+        if(!txSubmitting){button.disabled=false;button.style.opacity="";button.style.cursor="";button.textContent=originalText}
+      },wait);
+    };
     const {data:authData,error:authError}=await supabase.auth.getUser();
-    if(authError||!authData?.user){currentUser=null;alert("Sua sessão não está ativa. Entre novamente no DEXL.");return}
+    if(authError||!authData?.user){
+      currentUser=null;
+      txSubmitting=false;
+      button.textContent=originalText;
+      unlock();
+      alert("Sua sessão não está ativa. Entre novamente no DEXL.");
+      return;
+    }
     currentUser=authData.user;
     const description=document.getElementById("txDesc").value.trim(), amount=Number(document.getElementById("txValue").value);
     const type=document.getElementById("txType").value==="entrada"?"income":"expense", category=document.getElementById("txCat").value;
-    if(!description||amount<=0)return;
+    if(!description||amount<=0){
+      txSubmitting=false;
+      button.textContent=originalText;
+      unlock();
+      return;
+    }
     const {error}=await supabase.from("transactions").insert({user_id:currentUser.id,type,description,amount,category,transaction_date:new Date().toISOString().slice(0,10)});
     if(error){
       console.error("DEXL transaction insert error:",error);
+      txSubmitting=false;
+      button.textContent=originalText;
+      unlock();
       alert("Erro ao salvar: "+(error.message||"verifique sua sessão e tente novamente."));
       return;
     }
     txForm.reset();
-    await loadTransactions();
-    await updateStats();
     showToast("Transação concluída","Seu lançamento foi salvo no DEXL Finance.");
+    Promise.all([loadTransactions(),updateStats()]).catch(err=>console.error("DEXL transaction refresh error:",err));
+    txSubmitting=false;
+    unlock();
   });
 
   async function updateStats(){
