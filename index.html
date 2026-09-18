@@ -62,6 +62,7 @@ nav{height:78px;display:flex;align-items:center;justify-content:space-between;bo
   const SUPABASE_URL = "https://ydwlhgkbljuhepxkbfkr.supabase.co";
   const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_2HiZ501uOUU1JIbcj8wZgA_MBPJv491";
   const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  document.documentElement.dataset.dexlVersion="2026-09-18-fix";
 
   const modal=document.getElementById("authModal"), authForm=document.getElementById("authForm");
   const title=document.getElementById("authTitle"), eyebrow=document.getElementById("authEyebrow"), sub=document.getElementById("authSub");
@@ -106,9 +107,13 @@ nav{height:78px;display:flex;align-items:center;justify-content:space-between;bo
   });
 
   async function loadTransactions(){
-    if(!currentUser){txList.innerHTML="";txCount.textContent="0 registros";return}
+    if(!currentUser){
+      txList.innerHTML='<div class="row"><span style="color:#888">Entre na sua conta para ver suas transações.</span><span>—</span></div>';
+      txCount.textContent="0 registros";
+      return;
+    }
     const {data,error}=await supabase.from("transactions").select("*").eq("user_id",currentUser.id).order("transaction_date",{ascending:false}).order("created_at",{ascending:false});
-    if(error){console.error(error);txList.innerHTML='<div class="row"><span style="color:#fb7185">Não foi possível carregar suas transações.</span></div>';return}
+    if(error){console.error(error);txList.innerHTML='<div class="row"><span style="color:#fb7185">Erro ao consultar suas transações.</span></div>';return}
     txCount.textContent=`${data.length} registro${data.length===1?"":"s"}`;txList.innerHTML="";
     if(!data.length){txList.innerHTML='<div class="row"><span style="color:#888">Nenhuma transação ainda.</span><span>—</span></div>';return}
     data.forEach(t=>{
