@@ -135,6 +135,7 @@ button{font:inherit}
 </main>
 <footer class="container"><span>© 2026 DEXL Finance</span><span>Projeto em desenvolvimento</span></footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (() => {
   const KEY = "dexl_finance_transactions";
@@ -239,8 +240,12 @@ button{font:inherit}
 
 <script>
 (() => {
-  const AUTH_KEY="dexl_auth_user";
-  const TX_KEY="dexl_finance_transactions";
+  // DEXL Finance — Supabase Auth
+  const SUPABASE_URL = "https://ydwlhgkbljuhepxkbfkr.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_2HiZ501uOUU1JIbcj8wZgA_MBPJv491";
+  const { createClient } = window.supabase;
+  const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
   const modal=document.getElementById("authModal");
   const form=document.getElementById("authForm");
   const title=document.getElementById("authTitle");
@@ -250,6 +255,8 @@ button{font:inherit}
   const switchBtn=document.getElementById("authSwitch");
   const nameWrap=document.getElementById("nameWrap");
   const nameInput=document.getElementById("authName");
+  const emailInput=document.getElementById("authEmail");
+  const passwordInput=document.getElementById("authPassword");
   const message=document.getElementById("authMessage");
   const dashboard=document.getElementById("dashboardScreen");
   const dashName=document.getElementById("dashName");
@@ -258,7 +265,9 @@ button{font:inherit}
 
   function openAuth(nextMode){
     mode=nextMode;
-    modal.classList.add("open"); modal.setAttribute("aria-hidden","false"); message.textContent="";
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden","false");
+    message.textContent="";
     const reg=mode==="register";
     title.textContent=reg?"Criar sua conta":"Entrar no DEXL";
     eyebrow.textContent=reg?"COMECE AGORA":"ACESSO SEGURO";
@@ -266,50 +275,126 @@ button{font:inherit}
     submit.textContent=reg?"Criar minha conta":"Entrar";
     switchBtn.textContent=reg?"Já tenho uma conta → Entrar":"Ainda não tenho conta → Criar conta";
     nameWrap.style.display=reg?"block":"none";
-    if(reg) nameInput.focus(); else document.getElementById("authEmail").focus();
+    setTimeout(()=> (reg?nameInput:emailInput).focus(),50);
   }
-  function closeAuth(){modal.classList.remove("open");modal.setAttribute("aria-hidden","true");}
+
+  function closeAuth(){
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden","true");
+  }
+
+  function getDisplayName(user){
+    const metadataName=user?.user_metadata?.name;
+    if(metadataName) return metadataName;
+    return user?.email?.split("@")[0]?.replace(/[._-]+/g," ") || "você";
+  }
+
   function showDashboard(user){
     closeAuth();
-    dashName.textContent=user.name || "você";
-    dashboard.classList.add("open"); dashboard.setAttribute("aria-hidden","false");
+    dashName.textContent=getDisplayName(user);
+    dashboard.classList.add("open");
+    dashboard.setAttribute("aria-hidden","false");
     updateStats();
     document.body.style.overflow="hidden";
   }
-  function hideDashboard(){dashboard.classList.remove("open");dashboard.setAttribute("aria-hidden","true");document.body.style.overflow="";}
 
-  document.querySelectorAll("[data-open-auth]").forEach(btn=>btn.addEventListener("click",()=>openAuth(btn.dataset.openAuth)));
+  function hideDashboard(){
+    dashboard.classList.remove("open");
+    dashboard.setAttribute("aria-hidden","true");
+    document.body.style.overflow="";
+  }
+
+  function friendlyError(error){
+    const msg=(error?.message||"").toLowerCase();
+    if(msg.includes("user already registered")) return "Este e-mail já está cadastrado. Toque em Entrar.";
+    if(msg.includes("invalid login credentials")) return "E-mail ou senha incorretos.";
+    if(msg.includes("password should be at least")) return "A senha precisa ter pelo menos 6 caracteres.";
+    if(msg.includes("rate limit")) return "Muitas tentativas. Aguarde um pouco e tente novamente.";
+    return error?.message || "Não foi possível concluir. Tente novamente.";
+  }
+
+  document.querySelectorAll("[data-open-auth]").forEach(btn=>
+    btn.addEventListener("click",()=>openAuth(btn.dataset.openAuth))
+  );
   document.querySelectorAll("[data-close-auth]").forEach(el=>el.addEventListener("click",closeAuth));
   switchBtn.addEventListener("click",()=>openAuth(mode==="register"?"login":"register"));
-  document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeAuth();}});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape") closeAuth();});
 
-  form.addEventListener("submit",e=>{
+  form.addEventListener("submit",async e=>{
     e.preventDefault();
-    const email=document.getElementById("authEmail").value.trim();
-    const password=document.getElementById("authPassword").value;
-    const name=(nameInput.value.trim() || email.split("@")[0]).replace(/[._-]+/g," ");
-    if(!email || password.length<6){message.textContent="Use um e-mail válido e uma senha com 6+ caracteres.";return;}
-    const pretty=name.split(" ").filter(Boolean).map(x=>x[0].toUpperCase()+x.slice(1)).join(" ");
-    const user={name:pretty,email};
-    localStorage.setItem(AUTH_KEY,JSON.stringify(user));
-    message.textContent=mode==="register"?"Conta criada! Abrindo seu painel...":"Login realizado! Abrindo seu painel...";
-    setTimeout(()=>showDashboard(user),250);
+    message.textContent="";
+    submit.disabled=true;
+    submit.style.opacity=".65";
+
+    const email=emailInput.value.trim();
+    const password=passwordInput.value;
+    const rawName=(nameInput.value.trim() || email.split("@")[0]).replace(/[._-]+/g," ");
+    const pretty=rawName.split(" ").filter(Boolean).map(x=>x[0].toUpperCase()+x.slice(1)).join(" ");
+
+    try {
+      if(!email || password.length<6){
+        message.textContent="Use um e-mail válido e uma senha com 6+ caracteres.";
+        return;
+      }
+
+      if(mode==="register"){
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options:{ data:{ name:pretty } }
+        });
+        if(error) throw error;
+
+        if(data.session){
+          message.textContent="Conta criada! Abrindo seu painel...";
+          showDashboard(data.user);
+        } else {
+          message.textContent="Conta criada. Confira seu e-mail para confirmar o cadastro e depois entre no DEXL.";
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({email,password});
+        if(error) throw error;
+        message.textContent="Login realizado!";
+        showDashboard(data.user);
+      }
+    } catch(error){
+      message.textContent=friendlyError(error);
+    } finally {
+      submit.disabled=false;
+      submit.style.opacity="1";
+    }
   });
 
-  document.getElementById("logoutBtn").addEventListener("click",()=>{localStorage.removeItem(AUTH_KEY);hideDashboard();});
+  document.getElementById("logoutBtn").addEventListener("click",async()=>{
+    await supabase.auth.signOut();
+    hideDashboard();
+  });
+
   document.getElementById("backSite").addEventListener("click",hideDashboard);
-  document.getElementById("transactionBtn").addEventListener("click",()=>{hideDashboard();document.getElementById("app")?.scrollIntoView({behavior:"smooth"});});
+  document.getElementById("transactionBtn").addEventListener("click",()=>{
+    hideDashboard();
+    document.getElementById("app")?.scrollIntoView({behavior:"smooth"});
+  });
 
   function updateStats(){
-    const txs=JSON.parse(localStorage.getItem(TX_KEY)||"[]");let income=0,expense=0;
+    const txs=JSON.parse(localStorage.getItem("dexl_finance_transactions")||"[]");
+    let income=0,expense=0;
     txs.forEach(t=>t.type==="entrada"?income+=Number(t.value):expense+=Number(t.value));
     const f=n=>n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
     document.getElementById("incomeValue").textContent=f(income);
     document.getElementById("expenseValue").textContent=f(expense);
     document.getElementById("balanceValue").textContent=f(income-expense);
   }
-  const saved=localStorage.getItem(AUTH_KEY);
-  if(saved){try{showDashboard(JSON.parse(saved));}catch(e){localStorage.removeItem(AUTH_KEY);}}
+
+  // Keep the session alive and restore the dashboard after reload.
+  supabase.auth.getSession().then(({data})=>{
+    if(data.session?.user) showDashboard(data.session.user);
+  });
+
+  supabase.auth.onAuthStateChange((event, session)=>{
+    if(event==="SIGNED_IN" && session?.user) showDashboard(session.user);
+    if(event==="SIGNED_OUT") hideDashboard();
+  });
 })();
 </script>
 
