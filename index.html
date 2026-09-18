@@ -107,37 +107,42 @@ nav{height:78px;display:flex;align-items:center;justify-content:space-between;bo
   });
 
   async function loadTransactions(){
-    if(!currentUser){
+    const {data:authData,error:authError}=await supabase.auth.getUser();
+    if(authError||!authData?.user){
+      currentUser=null;
       txList.innerHTML='<div class="row"><span style="color:#888">Entre na sua conta para ver suas transações.</span><span>—</span></div>';
       txCount.textContent="0 registros";
       return;
     }
+    currentUser=authData.user;
     const {data,error}=await supabase.from("transactions").select("*").eq("user_id",currentUser.id).order("transaction_date",{ascending:false}).order("created_at",{ascending:false});
-    if(error){console.error(error);txList.innerHTML='<div class="row"><span style="color:#fb7185">Erro ao consultar suas transações.</span></div>';return}
-    txCount.textContent=`${data.length} registro${data.length===1?"":"s"}`;txList.innerHTML="";
-    if(!data.length){txList.innerHTML='<div class="row"><span style="color:#888">Nenhuma transação ainda.</span><span>—</span></div>';return}
-    data.forEach(t=>{
-      const row=document.createElement("div");row.className="row";
-      const left=document.createElement("span");left.innerHTML=`<b>${escapeHtml(t.description)}</b><small style="display:block;color:#777">${escapeHtml(t.category)}</small>`;
-      const right=document.createElement("span");right.style.color=t.type==="income"?"#4ade80":"#fb7185";right.textContent=(t.type==="income"?"+":"-")+" "+money(t.amount);
-      const del=document.createElement("button");del.textContent="×";del.style.cssText="margin-left:8px;background:none;border:0;color:#777;cursor:pointer;font-size:18px";del.onclick=async()=>{const {error}=await supabase.from("transactions").delete().eq("id",t.id).eq("user_id",currentUser.id);if(error)alert("Não foi possível excluir.");else{await loadTransactions();await updateStats()}};
-      right.appendChild(del);row.append(left,right);txList.appendChild(row);
-    });
+    if(error){
+      console.error("DEXL transactions load error:",error);
+      txList.innerHTML='<div class="row"><span style="color:#fb7185">Não foi possível consultar suas transações. Toque em Fechar e tente entrar novamente.</span></div>';
+      return;
+    }
   }
 
   txForm.addEventListener("submit",async e=>{
     e.preventDefault();
-    if(!currentUser){alert("Entre na sua conta para registrar uma transação.");return}
+    const {data:authData,error:authError}=await supabase.auth.getUser();
+    if(authError||!authData?.user){currentUser=null;alert("Sua sessão não está ativa. Entre novamente no DEXL.");return}
+    currentUser=authData.user;
     const description=document.getElementById("txDesc").value.trim(), amount=Number(document.getElementById("txValue").value);
     const type=document.getElementById("txType").value==="entrada"?"income":"expense", category=document.getElementById("txCat").value;
     if(!description||amount<=0)return;
     const {error}=await supabase.from("transactions").insert({user_id:currentUser.id,type,description,amount,category,transaction_date:new Date().toISOString().slice(0,10)});
-    if(error){console.error(error);alert("Não foi possível salvar a transação. Tente novamente.");return}
-    txForm.reset();await loadTransactions();await updateStats();
+    if(error){
+      console.error("DEXL transaction insert error:",error);
+      alert("Erro ao salvar: "+(error.message||"verifique sua sessão e tente novamente."));
+      return;
+    }
   });
 
   async function updateStats(){
-    if(!currentUser)return;
+    const {data:authData,error:authError}=await supabase.auth.getUser();
+    if(authError||!authData?.user){currentUser=null;return}
+    currentUser=authData.user;
     const {data,error}=await supabase.from("transactions").select("type,amount").eq("user_id",currentUser.id);
     if(error){console.error(error);return}
     let income=0,expense=0;(data||[]).forEach(t=>t.type==="income"?income+=Number(t.amount):expense+=Number(t.amount));
