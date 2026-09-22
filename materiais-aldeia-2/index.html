@@ -181,7 +181,8 @@ function renderMaterials(arr){
 }
 
 function toggleMaterial(id,max,on){
-  if(on)selected[id]={quantity:Number(max),max:Number(max)};
+  const n=Number(max)||0;
+  if(on && n>0) selected[id]={quantity:1,max:n};
   else delete selected[id];
   updateMaterialDisplay(id);
 }
@@ -191,32 +192,43 @@ function changeMaterialQty(id,delta){
   if(!row)return;
   const checkbox=row.querySelector('input[type="checkbox"]');
   let data=selected[id];
+
   if(!data){
-    let max=Number(row.querySelector("#avail"+id)?.textContent.match(/\d+/)?.[0]||0);
+    let max=0;
     if(mode==="retirada"){
       const found=items.find(x=>Number(x.id)===Number(id));
       max=Number(found?.available)||0;
+    }else{
+      const txt=row.querySelector("#avail"+id)?.textContent||"";
+      max=Number((txt.match(/\d+/)||["0"])[0]);
     }
     if(!max)return;
-    data=selected[id]={quantity:0,max:max};
+    data=selected[id]={quantity:1,max:max};
+  }else{
+    const next=Math.min(data.max,Math.max(0,data.quantity+delta));
+    if(next===0){
+      delete selected[id];
+      checkbox.checked=false;
+      updateMaterialDisplay(id);
+      return;
+    }
+    data.quantity=next;
   }
-  const next=Math.min(data.max,Math.max(0,data.quantity+delta));
-  if(next===0)delete selected[id];
-  else selected[id].quantity=next;
-  checkbox.checked=next>0;
+
+  checkbox.checked=true;
   updateMaterialDisplay(id);
 }
 
 function updateMaterialDisplay(id){
   const q=selected[id]?.quantity||0;
-  const max=selected[id]?.max;
-  const qty=$("mq"+id);
-  const info=$("avail"+id);
-  const plus=$("plus"+id);
-  const minus=$("minus"+id);
+  const max=selected[id]?.max||0;
+  const qty=$("#mq"+id);
+  const info=$("#avail"+id);
+  const plus=$("#plus"+id);
+  const minus=$("#minus"+id);
   if(qty)qty.textContent=q;
-  if(info)info.textContent=(mode==="retirada"?"Disponível: ":"Em seu nome: ")+(max!=null?max-q:0);
-  if(plus)plus.disabled=selected[id]?q>=selected[id].max:false;
+  if(info)info.textContent=(mode==="retirada"?"Disponível: ":"Em seu nome: ")+max;
+  if(plus)plus.disabled=!selected[id]||q>=max;
   if(minus)minus.disabled=!selected[id]||q<=0;
 }
 
