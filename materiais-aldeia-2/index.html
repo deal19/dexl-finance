@@ -167,69 +167,103 @@ function renderMaterials(arr){
     $("materials").innerHTML='<div class="row">Nenhum material disponível para esta ação.</div>';
     return;
   }
-  $("materials").innerHTML=arr.map(x=>
-    '<div class="row" data-material-id="'+x.id+'" style="display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px">'+
-    '<input type="checkbox" style="width:22px;height:22px" onchange="toggleMaterial('+x.id+','+x.quantity+',this.checked)">'+
-    '<div><b>'+x.name+'</b><div id="avail'+x.id+'" style="font-size:12px;color:#718096">'+
-    (mode==="retirada"?"Disponível: ":"Em seu nome: ")+x.quantity+'</div></div>'+
-    '<div style="display:flex;align-items:center;gap:6px">'+
-    '<button class="gray" style="min-height:40px;width:40px;padding:0" id="minus'+x.id+'" onclick="changeMaterialQty('+x.id+',-1)" disabled>−</button>'+
-    '<span id="mq'+x.id+'" style="min-width:20px;text-align:center;font-weight:900">0</span>'+
-    '<button class="gray plus-btn" style="min-height:40px;width:40px;padding:0" id="plus'+x.id+'" onclick="changeMaterialQty('+x.id+',1)">+</button>'+
-    '</div></div>'
-  ).join("");
-}
 
-function toggleMaterial(id,max,on){
-  const n=Number(max)||0;
-  if(on && n>0) selected[id]={quantity:1,max:n};
-  else delete selected[id];
-  updateMaterialDisplay(id);
+  $("materials").innerHTML=arr.map(x=>{
+    const id=Number(x.id), max=Number(x.quantity)||0;
+    return '<div class="row material-row" data-material-id="'+id+'" data-max="'+max+'" style="display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px">'+
+      '<input class="material-check" type="checkbox" data-id="'+id+'" style="width:22px;height:22px">'+
+      '<div><b>'+x.name+'</b><div id="avail'+id+'" style="font-size:12px;color:#718096">'+
+      (mode==="retirada"?"Disponível: ":"Em seu nome: ")+max+'</div></div>'+
+      '<div style="display:flex;align-items:center;gap:6px">'+
+      '<button type="button" class="gray qty-minus" data-id="'+id+'" style="min-height:40px;width:40px;padding:0" disabled>−</button>'+
+      '<span id="mq'+id+'" style="min-width:20px;text-align:center;font-weight:900">0</span>'+
+      '<button type="button" class="gray plus-btn qty-plus" data-id="'+id+'" style="min-height:40px;width:40px;padding:0">+</button>'+
+      '</div></div>';
+  }).join("");
+
+  // Eventos ficam registrados diretamente no painel. Isso evita falhas de
+  // onclick/onchange no Safari/iPhone e mantém checkbox, quantidade e botões sincronizados.
+  $("materials").querySelectorAll(".material-check").forEach(check=>{
+    check.addEventListener("change",()=>{
+      const id=Number(check.dataset.id);
+      const row=check.closest(".material-row");
+      const max=Number(row.dataset.max)||0;
+      if(check.checked && max>0) selected[id]={quantity:1,max:max};
+      else delete selected[id];
+      updateMaterialDisplay(id);
+    });
+  });
+
+  $("materials").querySelectorAll(".qty-plus").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      changeMaterialQty(Number(btn.dataset.id),1);
+    });
+  });
+
+  $("materials").querySelectorAll(".qty-minus").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      changeMaterialQty(Number(btn.dataset.id),-1);
+    });
+  });
 }
 
 function changeMaterialQty(id,delta){
   const row=document.querySelector('[data-material-id="'+id+'"]');
   if(!row)return;
-  const checkbox=row.querySelector('input[type="checkbox"]');
+
+  const checkbox=row.querySelector(".material-check");
+  const max=Number(row.dataset.max)||0;
+  if(!max)return;
+
   let data=selected[id];
 
+  // Tocar no + em um item ainda não selecionado também seleciona o item e começa em 1.
   if(!data){
-    let max=0;
-    if(mode==="retirada"){
-      const found=items.find(x=>Number(x.id)===Number(id));
-      max=Number(found?.available)||0;
-    }else{
-      const txt=row.querySelector("#avail"+id)?.textContent||"";
-      max=Number((txt.match(/\d+/)||["0"])[0]);
-    }
-    if(!max)return;
-    data=selected[id]={quantity:1,max:max};
-  }else{
-    const next=Math.min(data.max,Math.max(0,data.quantity+delta));
-    if(next===0){
-      delete selected[id];
-      checkbox.checked=false;
-      updateMaterialDisplay(id);
-      return;
-    }
-    data.quantity=next;
+    if(delta<=0)return;
+    selected[id]={quantity:1,max:max};
+    checkbox.checked=true;
+    updateMaterialDisplay(id);
+    return;
   }
 
-  checkbox.checked=true;
+  const next=Math.min(data.max,Math.max(0,data.quantity+delta));
+
+  if(next<=0){
+    delete selected[id];
+    checkbox.checked=false;
+  }else{
+    data.quantity=next;
+    checkbox.checked=true;
+  }
+
   updateMaterialDisplay(id);
 }
 
 function updateMaterialDisplay(id){
+  const row=document.querySelector('[data-material-id="'+id+'"]');
+  if(!row)return;
+
   const q=selected[id]?.quantity||0;
-  const max=selected[id]?.max||0;
+  const max=Number(row.dataset.max)||0;
   const qty=$("#mq"+id);
   const info=$("#avail"+id);
-  const plus=$("#plus"+id);
-  const minus=$("#minus"+id);
+  const plus=row.querySelector(".qty-plus");
+  const minus=row.querySelector(".qty-minus");
+
   if(qty)qty.textContent=q;
-  if(info)info.textContent=(mode==="retirada"?"Disponível: ":"Em seu nome: ")+max;
-  if(plus)plus.disabled=!selected[id]||q>=max;
-  if(minus)minus.disabled=!selected[id]||q<=0;
+
+  // Mostra quanto ainda pode ser selecionado.
+  if(info)info.textContent=(mode==="retirada"?"Disponível: ":"Em seu nome: ")+(max-q);
+
+  if(plus){
+    plus.disabled=!selected[id] || q>=max;
+    plus.setAttribute("aria-disabled",String(plus.disabled));
+  }
+
+  if(minus){
+    minus.disabled=!selected[id] || q<=0;
+    minus.setAttribute("aria-disabled",String(minus.disabled));
+  }
 }
 
 async function submitMove(){
